@@ -1,11 +1,3 @@
-/**
- * controllers/session.controller.js
- * Manages interview session lifecycle:
- *   - create  → seed questions from the question bank
- *   - list    → interview history for the current user
- *   - get     → single session with its questions
- *   - complete → mark a session as finished and calculate a score
- */
 
 const prisma = require("../prisma/client");
 const { getQuestionsForSession } = require("../services/questionBank.service");

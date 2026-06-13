@@ -1,8 +1,3 @@
-/**
- * controllers/resume.controller.js
- * Manages resume uploads and retrieval.
- * Files are saved to disk by the Multer middleware before this controller runs.
- */
 
 const path = require("path");
 const fs = require("fs");

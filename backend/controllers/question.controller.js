@@ -1,7 +1,3 @@
-/**
- * controllers/question.controller.js
- * Handles answer submission for individual questions within a session.
- */
 
 const prisma = require("../prisma/client");
 
