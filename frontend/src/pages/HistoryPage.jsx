@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { History, ChevronDown, ChevronUp, Plus, CheckCircle2, Clock } from 'lucide-react'
+import { History, ChevronDown, ChevronUp, Plus, CheckCircle2, Clock, BrainCircuit, Database } from 'lucide-react'
 import { useSessions } from '../hooks/useApi'
 import {
   PageHeader, Card, Badge, Button, PageLoader, EmptyState
@@ -13,8 +13,8 @@ export default function HistoryPage() {
 
   if (isLoading) return <PageLoader />
 
-  const completed   = sessions.filter(s =>  s.completedAt)
-  const inProgress  = sessions.filter(s => !s.completedAt)
+  const completed  = sessions.filter(s =>  s.completedAt)
+  const inProgress = sessions.filter(s => !s.completedAt)
 
   return (
     <div className="animate-fade-in">
@@ -93,26 +93,41 @@ export default function HistoryPage() {
 }
 
 function SessionCard({ session, expanded, onToggle }) {
-  const isComplete = !!session.completedAt
-  const questions  = session.questions ?? []
-  const answered   = questions.filter(q => q.answer).length
+  const isComplete     = !!session.completedAt
+  const questions      = session.questions ?? []
+  const answered       = questions.filter(q => q.answer).length
+  const questionSource = session.questionSource ?? null  // "ai" | "fallback" | null
 
   return (
     <Card className="overflow-hidden p-0">
-      {/* Header row */}
+      {/* ── Header row ── */}
       <div className="flex items-center justify-between p-4 gap-4 flex-wrap">
         <div className="flex items-center gap-3 min-w-0">
+          {/* Status icon */}
           <div className={`flex items-center justify-center w-9 h-9 rounded-full flex-shrink-0 ${
             isComplete ? 'bg-green-100 text-green-600' : 'bg-amber-100 text-amber-600'
           }`}>
             {isComplete ? <CheckCircle2 size={18} /> : <Clock size={18} />}
           </div>
+
           <div className="min-w-0">
             <p className="text-sm font-semibold text-slate-800">{formatRole(session.role)}</p>
             <div className="flex items-center gap-2 mt-0.5 flex-wrap">
               <Badge variant={difficultyVariant(session.difficulty)}>
                 {formatDifficulty(session.difficulty)}
               </Badge>
+              {/* AI source pill — shows which question source was used */}
+              {questionSource === 'ai' ? (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-brand-100 text-brand-700">
+                  <BrainCircuit size={9} />
+                  AI
+                </span>
+              ) : questionSource === 'fallback' ? (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-500">
+                  <Database size={9} />
+                  Bank
+                </span>
+              ) : null}
               <span className="text-xs text-slate-400">{formatDate(session.startedAt)}</span>
               {isComplete && session.completedAt && (
                 <span className="text-xs text-slate-400">
@@ -134,13 +149,14 @@ function SessionCard({ session, expanded, onToggle }) {
           <button
             onClick={onToggle}
             className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
+            aria-label={expanded ? 'Collapse' : 'Expand'}
           >
             {expanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
           </button>
         </div>
       </div>
 
-      {/* Expanded Q&A */}
+      {/* ── Expanded Q&A panel ── */}
       {expanded && (
         <div className="border-t border-slate-200 divide-y divide-slate-100">
           {questions.map((q, i) => (
@@ -158,9 +174,23 @@ function SessionCard({ session, expanded, onToggle }) {
               )}
             </div>
           ))}
-          <div className="px-4 py-3 bg-slate-50 flex items-center justify-between text-xs text-slate-500">
-            <span>{answered} / {questions.length} answered</span>
-            {isComplete && <span>Score: <strong className="text-brand-600">{session.score ?? 0}%</strong></span>}
+
+          {/* Footer summary row */}
+          <div className="px-4 py-3 bg-slate-50 flex items-center justify-between text-xs text-slate-500 flex-wrap gap-2">
+            <span>{answered} / {questions.length} questions answered</span>
+            <div className="flex items-center gap-3">
+              {questionSource && (
+                <span className="flex items-center gap-1">
+                  {questionSource === 'ai'
+                    ? <><BrainCircuit size={10} className="text-brand-500" /> AI-generated</>
+                    : <><Database size={10} /> Question bank</>
+                  }
+                </span>
+              )}
+              {isComplete && (
+                <span>Score: <strong className="text-brand-600">{session.score ?? 0}%</strong></span>
+              )}
+            </div>
           </div>
         </div>
       )}

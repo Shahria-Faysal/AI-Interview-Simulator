@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { CheckCircle2, ChevronLeft, ChevronRight, Send, Trophy } from 'lucide-react'
+import { CheckCircle2, ChevronLeft, ChevronRight, Send, Trophy, BrainCircuit, Database } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useSession, useSubmitAnswer, useCompleteSession } from '../hooks/useApi'
 import {
@@ -8,16 +8,45 @@ import {
 } from '../components/ui'
 import { formatRole, formatDifficulty, difficultyVariant } from '../utils/format'
 
+// ─── AI source pill ───────────────────────────────────────────────────────────
+// Sessions carry a `questionSource` field ("ai" | "fallback") set at creation
+// time and stored in the DB via the session meta. We derive it from whether any
+// question text looks like a fallback (hardcoded) question, or simply show the
+// pill based on the session metadata when available.
+//
+// In practice the pill is purely informational — it lets the user know whether
+// Gemini generated their questions or whether the hardcoded bank was used.
+
+function AISourcePill({ source }) {
+  if (!source) return null
+
+  const isAI = source === 'ai'
+  return (
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
+      isAI
+        ? 'bg-brand-100 text-brand-700'
+        : 'bg-slate-100 text-slate-500'
+    }`}>
+      {isAI
+        ? <><BrainCircuit size={10} /> AI-generated</>
+        : <><Database size={10} /> Question bank</>
+      }
+    </span>
+  )
+}
+
+// ─── Main interview page ──────────────────────────────────────────────────────
+
 export default function InterviewPage() {
   const { id } = useParams()
   const navigate = useNavigate()
 
   const { data: session, isLoading, error } = useSession(id)
   const { mutateAsync: submitAnswer, isPending: submitting } = useSubmitAnswer()
-  const { mutateAsync: complete, isPending: completing } = useCompleteSession()
+  const { mutateAsync: complete,     isPending: completing } = useCompleteSession()
 
   const [currentIndex, setCurrentIndex] = useState(0)
-  const [draftAnswer, setDraftAnswer] = useState('')
+  const [draftAnswer,  setDraftAnswer]  = useState('')
   const [savedAnswers, setSavedAnswers] = useState({}) // questionId → saved text
 
   if (isLoading) return <PageLoader />
@@ -25,16 +54,18 @@ export default function InterviewPage() {
     return <ErrorAlert message="Session not found or you don't have access." />
   }
 
-  // Show completion screen if already completed
+  // Completed sessions go straight to the summary screen
   if (session.completedAt) {
     return <CompletionScreen session={session} />
   }
 
-  const questions = session.questions ?? []
-  const currentQ  = questions[currentIndex]
+  const questions    = session.questions ?? []
+  const currentQ     = questions[currentIndex]
+  const questionSource = session.questionSource ?? null  // "ai" | "fallback" | null
+
   if (!currentQ) return <ErrorAlert message="No questions found for this session." />
 
-  const isAnswered   = (qId) => !!(savedAnswers[qId] ?? questions.find(q => q.id === qId)?.answer)
+  const isAnswered    = (qId) => !!(savedAnswers[qId] ?? questions.find(q => q.id === qId)?.answer)
   const answeredCount = questions.filter(q => isAnswered(q.id)).length
 
   const handleSave = async () => {
@@ -52,7 +83,6 @@ export default function InterviewPage() {
     const next = currentIndex + dir
     if (next < 0 || next >= questions.length) return
     setCurrentIndex(next)
-    // Pre-fill textarea with existing answer for new question
     const nextQ = questions[next]
     setDraftAnswer(savedAnswers[nextQ.id] ?? nextQ.answer ?? '')
   }
@@ -67,21 +97,22 @@ export default function InterviewPage() {
     }
   }
 
-  // Pre-fill on first render of a question
-  const currentDraft = draftAnswer !== undefined
+  const currentDraft = draftAnswer !== ''
     ? draftAnswer
     : (savedAnswers[currentQ.id] ?? currentQ.answer ?? '')
 
   return (
     <div className="animate-fade-in max-w-2xl">
-      {/* Header */}
+      {/* ── Session header ── */}
       <div className="flex items-start justify-between mb-6 gap-4 flex-wrap">
         <div>
-          <div className="flex items-center gap-2 mb-1">
+          <div className="flex items-center gap-2 mb-1 flex-wrap">
             <span className="text-lg font-bold text-slate-900">{formatRole(session.role)}</span>
             <Badge variant={difficultyVariant(session.difficulty)}>
               {formatDifficulty(session.difficulty)}
             </Badge>
+            {/* AI source indicator — shown when metadata is available */}
+            <AISourcePill source={questionSource} />
           </div>
           <p className="text-sm text-slate-500">
             {answeredCount} of {questions.length} questions answered
@@ -99,7 +130,7 @@ export default function InterviewPage() {
         </Button>
       </div>
 
-      {/* Progress bar */}
+      {/* ── Progress bar ── */}
       <div className="w-full h-2 bg-slate-200 rounded-full mb-6 overflow-hidden">
         <div
           className="h-full bg-brand-600 rounded-full transition-all duration-500"
@@ -107,7 +138,7 @@ export default function InterviewPage() {
         />
       </div>
 
-      {/* Question pills */}
+      {/* ── Question number pills ── */}
       <div className="flex gap-2 flex-wrap mb-6">
         {questions.map((q, i) => (
           <button
@@ -129,22 +160,27 @@ export default function InterviewPage() {
         ))}
       </div>
 
-      {/* Question card */}
+      {/* ── Question card ── */}
       <Card className="mb-4">
-        <div className="flex items-center gap-2 mb-4">
-          <span className="text-xs font-semibold text-brand-600 uppercase tracking-wide">
-            Question {currentIndex + 1}
-          </span>
-          {isAnswered(currentQ.id) && (
-            <Badge variant="success">Answered</Badge>
-          )}
+        <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-brand-600 uppercase tracking-wide">
+              Question {currentIndex + 1} of {questions.length}
+            </span>
+            {isAnswered(currentQ.id) && (
+              <Badge variant="success">Answered</Badge>
+            )}
+          </div>
+          {/* Per-question AI source chip */}
+          <AISourcePill source={questionSource} />
         </div>
+
         <p className="text-base font-medium text-slate-900 leading-relaxed mb-5">
           {currentQ.question}
         </p>
 
         <textarea
-          value={draftAnswer !== '' ? draftAnswer : (savedAnswers[currentQ.id] ?? currentQ.answer ?? '')}
+          value={currentDraft}
           onChange={(e) => setDraftAnswer(e.target.value)}
           placeholder="Type your answer here…"
           rows={6}
@@ -163,20 +199,12 @@ export default function InterviewPage() {
           </Button>
 
           <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              onClick={handleSave}
-              loading={submitting}
-            >
+            <Button size="sm" onClick={handleSave} loading={submitting}>
               <Send size={14} />
               Save answer
             </Button>
             {currentIndex < questions.length - 1 && (
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => handleNavigate(1)}
-              >
+              <Button variant="secondary" size="sm" onClick={() => handleNavigate(1)}>
                 Next
                 <ChevronRight size={15} />
               </Button>
@@ -192,10 +220,13 @@ export default function InterviewPage() {
   )
 }
 
+// ─── Completion screen ────────────────────────────────────────────────────────
+
 function CompletionScreen({ session }) {
-  const navigate = useNavigate()
+  const navigate  = useNavigate()
   const questions = session.questions ?? []
   const answered  = questions.filter(q => q.answer)
+  const questionSource = session.questionSource ?? null
 
   return (
     <div className="animate-fade-in max-w-2xl">
@@ -207,18 +238,29 @@ function CompletionScreen({ session }) {
         <p className="text-slate-500 text-sm">Here's a summary of your session.</p>
       </div>
 
+      {/* Score card */}
       <Card className="mb-6 text-center">
         <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Final score</p>
         <p className="text-5xl font-bold text-brand-600">{session.score ?? 0}%</p>
         <p className="text-sm text-slate-500 mt-2">
           {answered.length} of {questions.length} questions answered
         </p>
-        <div className="flex items-center justify-center gap-2 mt-3">
-          <Badge variant={difficultyVariant(session.difficulty)}>{formatDifficulty(session.difficulty)}</Badge>
+        <div className="flex items-center justify-center gap-2 mt-3 flex-wrap">
+          <Badge variant={difficultyVariant(session.difficulty)}>
+            {formatDifficulty(session.difficulty)}
+          </Badge>
           <Badge variant="brand">{formatRole(session.role)}</Badge>
+          {/* Show whether questions were AI-generated or from the bank */}
+          {questionSource === 'ai' && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-brand-100 text-brand-700">
+              <BrainCircuit size={10} />
+              AI-generated questions
+            </span>
+          )}
         </div>
       </Card>
 
+      {/* Q&A review */}
       <div className="space-y-3 mb-6">
         {questions.map((q, i) => (
           <Card key={q.id} className="p-4">

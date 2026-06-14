@@ -1,0 +1,155 @@
+/**
+ * services/aiService.js
+ * Core AI question-generation service.
+ *
+ * Architecture:
+ *  generateInterviewQuestions(role, difficulty)
+ *    └─ tryGeminiGeneration()     ← primary path
+ *         ├─ success → return questions
+ *         └─ failure → fallbackToQuestionBank()   ← safety net
+ *
+ * Key guarantees:
+ *  1. Never throws to the caller — always resolves with questions.
+ *  2. Questions are generated fresh each session (Gemini varies on temp 0.7).
+ *  3. If the API key is missing or Gemini returns garbage, the hardcoded
+ *     question bank is used transparently.
+ *  4. A 15-second timeout prevents Gemini from hanging a session creation.
+ *  5. All outcomes are logged for observability.
+ */
+
+const { getGeminiModel }          = require("../config/gemini");
+const { buildQuestionPrompt, DIFFICULTY_CONFIG } = require("../config/prompts");
+const { parseGeminiQuestions }    = require("../utils/aiResponseParser");
+const { getQuestionsForSession }  = require("./questionBank.service");
+const logger                      = require("../utils/logger");
+
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const GEMINI_TIMEOUT_MS = 15_000; // 15 seconds
+
+// ─── Timeout wrapper ─────────────────────────────────────────────────────────
+
+/**
+ * Races a promise against a timeout.
+ * @param {Promise}  promise
+ * @param {number}   ms
+ * @param {string}   label   - used in the timeout error message
+ */
+const withTimeout = (promise, ms, label = "operation") => {
+  const timeout = new Promise((_, reject) =>
+    setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms)
+  );
+  return Promise.race([promise, timeout]);
+};
+
+// ─── Primary path: Gemini ────────────────────────────────────────────────────
+
+/**
+ * Calls Gemini and parses the response into a question array.
+ *
+ * @param {string} role
+ * @param {string} difficulty
+ * @returns {Promise<Array<{ question: string, orderIndex: number }>>}
+ * @throws {Error} on API errors, timeouts, or parse failures
+ */
+const tryGeminiGeneration = async (role, difficulty) => {
+  const model = getGeminiModel();
+
+  if (!model) {
+    throw new Error("Gemini model not initialised (API key missing).");
+  }
+
+  const prompt   = buildQuestionPrompt(role, difficulty);
+  const expected = DIFFICULTY_CONFIG[difficulty]?.count ?? 5;
+
+  logger.info("[AI] Sending request to Gemini", { role, difficulty, expected });
+
+  // Wrap the Gemini call with a hard timeout
+  const result = await withTimeout(
+    model.generateContent(prompt),
+    GEMINI_TIMEOUT_MS,
+    "Gemini generateContent"
+  );
+
+  const rawText = result.response?.text?.();
+
+  if (!rawText || typeof rawText !== "string") {
+    throw new Error("Gemini returned an empty or non-string response.");
+  }
+
+  logger.debug("[AI] Raw Gemini response", { length: rawText.length, preview: rawText.slice(0, 200) });
+
+  const { questions, valid, count, error } = parseGeminiQuestions(rawText, expected);
+
+  if (!valid || count === 0) {
+    throw new Error(`AI response parsing failed: ${error}`);
+  }
+
+  // Attach orderIndex so the DB insert matches the Question model
+  return questions.map((q, i) => ({ question: q.question, orderIndex: i + 1 }));
+};
+
+// ─── Fallback path: hardcoded bank ───────────────────────────────────────────
+
+/**
+ * Falls back to the local question bank.
+ * Never throws — if the bank also fails (bad role), returns empty array.
+ *
+ * @param {string} role
+ * @param {string} difficulty
+ * @returns {Array<{ question: string, orderIndex: number }>}
+ */
+const fallbackToQuestionBank = (role, difficulty) => {
+  try {
+    logger.warn("[AI] Falling back to hardcoded question bank", { role, difficulty });
+    return getQuestionsForSession(role, difficulty);
+  } catch (err) {
+    logger.error("[AI] Fallback question bank also failed", { error: err.message, role, difficulty });
+    return [];
+  }
+};
+
+// ─── Public API ───────────────────────────────────────────────────────────────
+
+/**
+ * Generates interview questions for a given role and difficulty.
+ *
+ * Always resolves — never rejects. On any AI failure, returns hardcoded
+ * questions so interview sessions can always be created.
+ *
+ * @param {string} role        - e.g. "FRONTEND_DEVELOPER"
+ * @param {string} difficulty  - "EASY" | "MEDIUM" | "HARD"
+ * @returns {Promise<{ questions: Array<{ question: string, orderIndex: number }>, source: "ai" | "fallback" }>}
+ */
+const generateInterviewQuestions = async (role, difficulty) => {
+  const startTime = Date.now();
+
+  try {
+    const questions = await tryGeminiGeneration(role, difficulty);
+
+    const elapsed = Date.now() - startTime;
+    logger.info("[AI] Questions generated successfully", {
+      role,
+      difficulty,
+      count:      questions.length,
+      elapsed_ms: elapsed,
+      source:     "gemini",
+    });
+
+    return { questions, source: "ai" };
+  } catch (aiError) {
+    const elapsed = Date.now() - startTime;
+    logger.error("[AI] Gemini generation failed — using fallback", {
+      error:      aiError.message,
+      role,
+      difficulty,
+      elapsed_ms: elapsed,
+    });
+
+    const questions = fallbackToQuestionBank(role, difficulty);
+
+    return { questions, source: "fallback" };
+  }
+};
+
+module.exports = { generateInterviewQuestions };

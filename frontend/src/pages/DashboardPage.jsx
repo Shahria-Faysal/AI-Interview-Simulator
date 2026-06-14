@@ -1,23 +1,24 @@
 import { Link } from 'react-router-dom'
-import { Plus, FileText, History, Trophy, Clock, Briefcase } from 'lucide-react'
+import { Plus, FileText, History, Trophy, Briefcase, BrainCircuit, Database } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { useResumes, useSessions } from '../hooks/useApi'
 import {
   PageHeader, Card, Badge, Button, PageLoader, EmptyState
 } from '../components/ui'
-import { formatRole, formatDifficulty, difficultyVariant, formatDate, formatDuration } from '../utils/format'
+import { formatRole, formatDifficulty, difficultyVariant, formatDate } from '../utils/format'
 
 export default function DashboardPage() {
   const { user } = useAuth()
-  const { data: resumes = [], isLoading: resumesLoading } = useResumes()
+  const { data: resumes  = [], isLoading: resumesLoading  } = useResumes()
   const { data: sessions = [], isLoading: sessionsLoading } = useSessions()
 
   const completedSessions = sessions.filter(s => s.completedAt)
   const avgScore = completedSessions.length
     ? Math.round(completedSessions.reduce((sum, s) => sum + (s.score ?? 0), 0) / completedSessions.length)
     : null
+  const aiSessionCount = sessions.filter(s => s.questionSource === 'ai').length
 
-  const latestResume = resumes[0] ?? null
+  const latestResume   = resumes[0] ?? null
   const recentSessions = sessions.slice(0, 3)
 
   return (
@@ -35,16 +36,27 @@ export default function DashboardPage() {
         }
       />
 
-      {/* Stats row */}
+      {/* ── Stats row ── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
-        <StatCard label="Total sessions"  value={sessions.length}       icon={Briefcase} />
-        <StatCard label="Completed"       value={completedSessions.length} icon={Trophy}    />
-        <StatCard label="Avg score"       value={avgScore !== null ? `${avgScore}%` : '—'} icon={Trophy} color="text-brand-600" />
-        <StatCard label="Resumes"         value={resumes.length}         icon={FileText}  />
+        <StatCard label="Total sessions"  value={sessions.length}           icon={Briefcase} />
+        <StatCard label="Completed"       value={completedSessions.length}  icon={Trophy} />
+        <StatCard
+          label="Avg score"
+          value={avgScore !== null ? `${avgScore}%` : '—'}
+          icon={Trophy}
+          color="text-brand-600"
+        />
+        <StatCard
+          label="AI sessions"
+          value={aiSessionCount}
+          icon={BrainCircuit}
+          color="text-brand-600"
+          title="Sessions using Gemini-generated questions"
+        />
       </div>
 
       <div className="grid md:grid-cols-2 gap-6">
-        {/* Resume card */}
+        {/* ── Resume card ── */}
         <Card>
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-semibold text-slate-900">Resume</h2>
@@ -78,29 +90,44 @@ export default function DashboardPage() {
           )}
         </Card>
 
-        {/* Recent sessions */}
+        {/* ── Recent sessions card ── */}
         <Card>
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-semibold text-slate-900">Recent sessions</h2>
             <Link to="/history" className="text-xs text-brand-600 hover:underline">View all</Link>
           </div>
+
           {sessionsLoading ? (
             <div className="space-y-2">
-              {[1,2,3].map(i => <div key={i} className="h-12 bg-slate-100 animate-pulse rounded-lg" />)}
+              {[1, 2, 3].map(i => (
+                <div key={i} className="h-12 bg-slate-100 animate-pulse rounded-lg" />
+              ))}
             </div>
           ) : recentSessions.length > 0 ? (
-            <div className="space-y-2">
+            <div className="space-y-1">
               {recentSessions.map(s => (
                 <Link key={s.id} to={s.completedAt ? '/history' : `/interview/${s.id}`}>
                   <div className="flex items-center justify-between p-3 rounded-lg hover:bg-slate-50 border border-transparent hover:border-slate-200 transition-colors">
-                    <div>
-                      <p className="text-sm font-medium text-slate-800">{formatRole(s.role)}</p>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <Badge variant={difficultyVariant(s.difficulty)}>{formatDifficulty(s.difficulty)}</Badge>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-slate-800 truncate">{formatRole(s.role)}</p>
+                      <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                        <Badge variant={difficultyVariant(s.difficulty)}>
+                          {formatDifficulty(s.difficulty)}
+                        </Badge>
+                        {/* Compact AI source indicator */}
+                        {s.questionSource === 'ai' ? (
+                          <span className="inline-flex items-center gap-0.5 text-xs text-brand-600 font-medium">
+                            <BrainCircuit size={10} /> AI
+                          </span>
+                        ) : s.questionSource === 'fallback' ? (
+                          <span className="inline-flex items-center gap-0.5 text-xs text-slate-400">
+                            <Database size={10} /> Bank
+                          </span>
+                        ) : null}
                         <span className="text-xs text-slate-400">{formatDate(s.startedAt)}</span>
                       </div>
                     </div>
-                    <div className="text-right">
+                    <div className="text-right flex-shrink-0 ml-3">
                       {s.completedAt ? (
                         <span className="text-sm font-semibold text-brand-600">{s.score ?? 0}%</span>
                       ) : (
@@ -132,9 +159,9 @@ export default function DashboardPage() {
   )
 }
 
-function StatCard({ label, value, icon: Icon, color = 'text-slate-700' }) {
+function StatCard({ label, value, icon: Icon, color = 'text-slate-700', title }) {
   return (
-    <Card className="flex flex-col gap-2 p-4">
+    <Card className="flex flex-col gap-2 p-4" title={title}>
       <div className="flex items-center justify-between">
         <span className="text-xs text-slate-500 font-medium uppercase tracking-wide">{label}</span>
         <Icon size={16} className="text-slate-400" />
