@@ -5,14 +5,15 @@ import { AuthProvider, useAuth } from './context/AuthContext'
 import AppLayout from './layouts/AppLayout'
 
 // Pages
-import LandingPage      from './pages/LandingPage'
-import LoginPage        from './pages/LoginPage'
-import RegisterPage     from './pages/RegisterPage'
-import DashboardPage    from './pages/DashboardPage'
-import ResumeUploadPage from './pages/ResumeUploadPage'
-import CreateInterviewPage from './pages/CreateInterviewPage'
-import InterviewPage    from './pages/InterviewPage'
-import HistoryPage      from './pages/HistoryPage'
+import LandingPage           from './pages/LandingPage'
+import LoginPage             from './pages/LoginPage'
+import RegisterPage          from './pages/RegisterPage'
+import DashboardPage         from './pages/DashboardPage'
+import ResumeUploadPage      from './pages/ResumeUploadPage'
+import CreateInterviewPage   from './pages/CreateInterviewPage'
+import InterviewPage         from './pages/InterviewPage'
+import InterviewResultsPage  from './pages/InterviewResultsPage'
+import HistoryPage           from './pages/HistoryPage'
 
 /** Redirects unauthenticated users to /login */
 const ProtectedRoute = ({ children }) => {
@@ -35,11 +36,12 @@ const AppRoutes = () => (
 
     {/* Protected – wrapped in the sidebar/header layout */}
     <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
-      <Route path="/dashboard"        element={<DashboardPage />} />
-      <Route path="/resume"           element={<ResumeUploadPage />} />
-      <Route path="/interview/new"    element={<CreateInterviewPage />} />
-      <Route path="/interview/:id"    element={<InterviewPage />} />
-      <Route path="/history"          element={<HistoryPage />} />
+      <Route path="/dashboard"                 element={<DashboardPage />} />
+      <Route path="/resume"                    element={<ResumeUploadPage />} />
+      <Route path="/interview/new"             element={<CreateInterviewPage />} />
+      <Route path="/interview/:id"             element={<InterviewPage />} />
+      <Route path="/interview/:id/results"     element={<InterviewResultsPage />} />
+      <Route path="/history"                   element={<HistoryPage />} />
     </Route>
 
     {/* Fallback */}

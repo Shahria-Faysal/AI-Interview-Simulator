@@ -14,6 +14,7 @@ const resumeRoutes = require("./routes/resume.routes");
 const sessionRoutes = require("./routes/session.routes");
 const questionRoutes = require("./routes/question.routes");
 const { errorHandler } = require("./middleware/error.middleware");
+const { isAiConfigured } = require("./config/gemini");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -50,9 +51,18 @@ app.use("/api/resumes", resumeRoutes);
 app.use("/api/sessions", sessionRoutes);
 app.use("/api/questions", questionRoutes);
 
-// Health-check endpoint (useful for deployment monitoring)
+// Health-check endpoint — includes AI readiness for operator monitoring
 app.get("/api/health", (req, res) => {
-  res.json({ status: "ok", timestamp: new Date().toISOString() });
+  const aiReady = isAiConfigured();
+  res.json({
+    status:    "ok",
+    timestamp: new Date().toISOString(),
+    ai: {
+      configured:    aiReady,
+      model:         aiReady ? "gemini-1.5-flash" : null,
+      fallbackReady: true,   // question bank is always available
+    },
+  });
 });
 
 // ─── 404 Handler ─────────────────────────────────────────────────────────────

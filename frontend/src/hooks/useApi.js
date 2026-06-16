@@ -107,9 +107,11 @@ export const useCompleteSession = () => {
 export const useSubmitAnswer = () => {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ questionId, answer, sessionId }) =>
+    // Returns the full response including evaluation data
+    mutationFn: ({ questionId, answer }) =>
       api.patch(`/questions/${questionId}/answer`, { answer }).then(r => r.data),
-    onSuccess: (_, { sessionId }) => {
+    onSuccess: (data, { sessionId }) => {
+      // Invalidate session cache so question list reflects saved answer + scores
       if (sessionId) {
         qc.invalidateQueries({ queryKey: QUERY_KEYS.session(sessionId) })
       }

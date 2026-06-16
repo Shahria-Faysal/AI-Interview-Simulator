@@ -106,4 +106,67 @@ Return ONLY a valid JSON array in this exact format:
 The response must start with [ and end with ] with no other text.`;
 };
 
-module.exports = { buildQuestionPrompt, DIFFICULTY_CONFIG, ROLE_LABELS };
+// ─── Evaluation prompt builder ───────────────────────────────────────────────
+
+/**
+ * Builds the prompt for evaluating a single candidate answer.
+ *
+ * Design decisions:
+ *  - Temperature is set low (0.2) on the model side for consistency.
+ *  - We explicitly ask for arrays of strings to match the DB schema.
+ *  - The ideal answer is requested so the user can learn, not just be judged.
+ *  - Score 0 is reserved for no-answer / gibberish — normal answers start at 1.
+ *
+ * @param {object} params
+ * @param {string} params.question   - The interview question text
+ * @param {string} params.answer     - The candidate's answer
+ * @param {string} params.role       - Prisma Role enum (e.g. "FRONTEND_DEVELOPER")
+ * @param {string} params.difficulty - Prisma Difficulty enum (e.g. "MEDIUM")
+ * @returns {string}
+ */
+const buildEvaluationPrompt = ({ question, answer, role, difficulty }) => {
+  const roleLabel  = ROLE_LABELS[role]  ?? role;
+  const diffConfig = DIFFICULTY_CONFIG[difficulty] ?? DIFFICULTY_CONFIG.MEDIUM;
+
+  return `You are a senior technical interviewer with 10+ years of experience evaluating ${roleLabel} candidates.
+
+Evaluate the following candidate answer objectively and professionally.
+
+Context:
+- Role: ${roleLabel}
+- Difficulty: ${diffConfig.label} (${diffConfig.description})
+- Question: ${question}
+
+Candidate Answer:
+"""
+${answer}
+"""
+
+Evaluation requirements:
+- Score the answer from 1 to 10, where:
+    1–3 = Poor (major gaps, misunderstandings, or largely incorrect)
+    4–5 = Below average (partial understanding, significant gaps)
+    6–7 = Average (correct fundamentals, lacks depth or precision)
+    8–9 = Good (solid understanding, minor gaps)
+    10  = Excellent (thorough, accurate, professional-level)
+- If the answer is completely blank, off-topic, or gibberish, assign score 0.
+- Identify 1–3 specific strengths (things the candidate got right or explained well).
+- Identify 1–3 specific weaknesses (concrete gaps, inaccuracies, or missing concepts).
+- Provide 1–3 actionable improvement suggestions (what to study or add).
+- Write an ideal answer that a senior engineer would give (2–4 sentences, concise but complete).
+- Be specific — reference actual concepts from the answer when possible.
+- Do NOT repeat the question or restate what you are doing.
+- Do NOT add preamble or commentary outside the JSON.
+
+Return ONLY a valid JSON object in this exact format:
+{
+  "score": <number 0-10>,
+  "strengths": ["<specific strength>", "..."],
+  "weaknesses": ["<specific weakness>", "..."],
+  "suggestions": ["<actionable suggestion>", "..."],
+  "idealAnswer": "<concise ideal answer>"
+}`;
+};
+
+module.exports = { buildQuestionPrompt, buildEvaluationPrompt, DIFFICULTY_CONFIG, ROLE_LABELS };
+

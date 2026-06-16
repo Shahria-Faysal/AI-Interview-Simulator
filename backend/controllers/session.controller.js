@@ -1,3 +1,11 @@
+/**
+ * controllers/session.controller.js
+ * Manages interview session lifecycle:
+ *   - create   → generate AI questions, seed into DB
+ *   - list     → interview history for the current user
+ *   - get      → single session with its questions
+ *   - complete → mark session finished, calculate score
+ */
 
 const prisma = require("../prisma/client");
 const { generateInterviewQuestions } = require("../services/aiService");
@@ -156,9 +164,12 @@ const getSession = async (req, res, next) => {
 
 /**
  * PATCH /api/sessions/:id/complete
- * Marks a session as completed.
- * Phase 1 score = % of questions that have a non-empty answer.
- * Phase 3 (AI scoring) will update this logic.
+ * Marks a session as completed and calculates the final score.
+ *
+ * Phase 4 scoring logic (priority order):
+ *  1. If questions have AI scores (1-10), compute the average and scale to 0-100.
+ *  2. Fall back to % of questions answered (Phase 1 logic) if no AI scores exist.
+ *     This covers the edge case where Gemini was unavailable for all answers.
  */
 const completeSession = async (req, res, next) => {
   try {
@@ -180,25 +191,36 @@ const completeSession = async (req, res, next) => {
       });
     }
 
-    const answered = session.questions.filter(
-      (q) => q.answer && q.answer.trim().length > 0
-    ).length;
-    const total = session.questions.length;
-    const score = total > 0 ? Math.round((answered / total) * 100) : 0;
+    const questions = session.questions;
+    const total     = questions.length;
+
+    // Prefer AI scores where available
+    const aiScoredQuestions = questions.filter(q => q.score !== null && q.score !== undefined);
+
+    let score;
+    if (aiScoredQuestions.length > 0) {
+      // Average AI score (1–10) → scale to 0–100
+      const avgAiScore = aiScoredQuestions.reduce((sum, q) => sum + q.score, 0) / aiScoredQuestions.length;
+      score = Math.round((avgAiScore / 10) * 100);
+    } else {
+      // Fallback: % of questions with any answer
+      const answered = questions.filter(q => q.answer && q.answer.trim().length > 0).length;
+      score = total > 0 ? Math.round((answered / total) * 100) : 0;
+    }
 
     const updatedSession = await prisma.interviewSession.update({
       where:   { id },
       data:    { completedAt: new Date(), score },
-      include: { questions: { orderBy: { orderIndex: 'asc' } } },
-    })
+      include: { questions: { orderBy: { orderIndex: "asc" } } },
+    });
 
     res.json({
       success: true,
-      message: 'Session completed.',
+      message: "Session completed.",
       data: {
         session: {
           ...updatedSession,
-          questionSource: updatedSession.questionSource === 'AI' ? 'ai' : 'fallback',
+          questionSource: updatedSession.questionSource === "AI" ? "ai" : "fallback",
         },
       },
     });

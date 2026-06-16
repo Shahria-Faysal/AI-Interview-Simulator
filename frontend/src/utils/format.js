@@ -46,3 +46,36 @@ export const formatDuration = (start, end) => {
   if (mins === 0) return `${secs}s`
   return `${mins}m ${secs}s`
 }
+
+/**
+ * Formats a 1–10 AI score as a display string.
+ * Returns '—' when score is null/undefined (not yet evaluated).
+ */
+export const formatScore = (score) => {
+  if (score === null || score === undefined) return '—'
+  return `${score}/10`
+}
+
+/**
+ * Returns a Tailwind colour class set for a given 1–10 score.
+ * Used consistently across ScoreBadge, history cards, and results page.
+ */
+export const scoreColorClass = (score) => {
+  if (score === null || score === undefined) return 'bg-slate-100 text-slate-500 border-slate-200'
+  if (score >= 8) return 'bg-green-100 text-green-700 border-green-200'
+  if (score >= 6) return 'bg-amber-100 text-amber-700 border-amber-200'
+  if (score >= 4) return 'bg-orange-100 text-orange-700 border-orange-200'
+  return 'bg-red-100 text-red-700 border-red-200'
+}
+
+/**
+ * Returns a plain text label for a 1–10 score band.
+ */
+export const scoreLabel = (score) => {
+  if (score === null || score === undefined) return 'Not evaluated'
+  if (score >= 9) return 'Excellent'
+  if (score >= 8) return 'Good'
+  if (score >= 6) return 'Average'
+  if (score >= 4) return 'Below average'
+  return 'Poor'
+}

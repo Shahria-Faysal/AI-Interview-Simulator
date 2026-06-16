@@ -1,5 +1,5 @@
 // Prisma Schema for AI Interview Simulator
-// Phase 3 - AI-powered question generation via Google Gemini
+// Phase 4 - AI-powered answer evaluation via Google Gemini
 
 generator client {
   provider = "prisma-client-js"
@@ -73,13 +73,20 @@ model InterviewSession {
 }
 
 model Question {
-  id         String  @id @default(cuid())
+  id         String   @id @default(cuid())
   sessionId  String
   question   String
-  answer     String? // user's submitted answer
-  feedback   String? // placeholder for Phase 2 AI feedback
-  score      Float?  // placeholder for Phase 2 AI scoring
-  orderIndex Int     // display order within the session
+  answer     String?  // user's submitted answer
+  orderIndex Int      // display order within the session
+
+  // ── Phase 4: AI evaluation fields ───────────────────────────────────────
+  // All nullable — populated after the user submits an answer and Gemini
+  // evaluates it. If Gemini is unavailable, these remain null (never crash).
+  score       Float?    // 1–10 from Gemini (null = not yet evaluated)
+  strengths   String[]  // array of strength bullet points
+  weaknesses  String[]  // array of weakness bullet points
+  suggestions String[]  // array of improvement suggestions
+  idealAnswer String?   // model answer from Gemini
 
   session InterviewSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 

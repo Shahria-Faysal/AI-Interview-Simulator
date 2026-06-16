@@ -1,3 +1,10 @@
+/**
+ * controllers/auth.controller.js
+ * Handles user registration and login.
+ * - Hashes passwords with bcrypt before storage
+ * - Issues signed JWTs on successful authentication
+ */
+
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const prisma = require("../prisma/client");

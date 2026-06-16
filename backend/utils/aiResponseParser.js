@@ -154,4 +154,98 @@ const parseGeminiQuestions = (rawText, expected) => {
   }
 };
 
-module.exports = { parseGeminiQuestions };
+// ─── Evaluation response parser ──────────────────────────────────────────────
+
+/**
+ * The null/fallback evaluation returned when Gemini fails or the answer is empty.
+ * Matches the shape the frontend and DB expect.
+ */
+const FALLBACK_EVALUATION = {
+  score:       null,
+  strengths:   [],
+  weaknesses:  [],
+  suggestions: [],
+  idealAnswer: null,
+};
+
+/**
+ * Validates and normalises a parsed evaluation object.
+ * Accepts the object Gemini should return and defensively coerces every field
+ * so downstream code never has to guard against unexpected types.
+ *
+ * @param {unknown} parsed
+ * @returns {{ valid: boolean, evaluation: EvaluationResult }}
+ */
+const normaliseEvaluation = (parsed) => {
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return { valid: false, evaluation: FALLBACK_EVALUATION };
+  }
+
+  // Score: must be a number 0–10
+  const rawScore = parsed.score;
+  const score = typeof rawScore === "number" && rawScore >= 0 && rawScore <= 10
+    ? Math.round(rawScore * 10) / 10  // round to 1 dp
+    : null;
+
+  if (score === null) {
+    return { valid: false, evaluation: FALLBACK_EVALUATION };
+  }
+
+  // Array fields: coerce anything that isn't a string[] into one
+  const toStringArray = (val) => {
+    if (!Array.isArray(val)) return [];
+    return val
+      .filter((v) => typeof v === "string" && v.trim().length > 0)
+      .map((v) => v.trim());
+  };
+
+  const strengths   = toStringArray(parsed.strengths);
+  const weaknesses  = toStringArray(parsed.weaknesses);
+  const suggestions = toStringArray(parsed.suggestions);
+  const idealAnswer = typeof parsed.idealAnswer === "string" && parsed.idealAnswer.trim().length > 0
+    ? parsed.idealAnswer.trim()
+    : null;
+
+  const evaluation = { score, strengths, weaknesses, suggestions, idealAnswer };
+  return { valid: true, evaluation };
+};
+
+/**
+ * Full parsing pipeline for evaluation responses.
+ * strip → extract object → parse → normalise → validate
+ *
+ * @param {string} rawText - Raw text response from Gemini
+ * @returns {{ evaluation: EvaluationResult, valid: boolean }}
+ */
+const parseEvaluationResponse = (rawText) => {
+  try {
+    const stripped = stripMarkdownFences(rawText);
+
+    // Evaluation returns an object, not an array — find { ... }
+    const objStart = stripped.indexOf("{");
+    const objEnd   = stripped.lastIndexOf("}");
+
+    if (objStart === -1 || objEnd === -1 || objEnd <= objStart) {
+      throw new Error("No JSON object found in evaluation response.");
+    }
+
+    const jsonString = stripped.slice(objStart, objEnd + 1);
+    const parsed     = JSON.parse(jsonString);
+    const { valid, evaluation } = normaliseEvaluation(parsed);
+
+    if (!valid) {
+      throw new Error("Evaluation object failed schema validation.");
+    }
+
+    return { evaluation, valid: true };
+  } catch (error) {
+    logger.error("[AI Parser] Failed to parse evaluation response", {
+      error:   error.message,
+      rawText: rawText?.slice(0, 300),
+    });
+    return { evaluation: FALLBACK_EVALUATION, valid: false };
+  }
+};
+
+module.exports = { parseGeminiQuestions, parseEvaluationResponse, FALLBACK_EVALUATION };
+

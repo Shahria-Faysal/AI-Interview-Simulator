@@ -45,14 +45,10 @@ const SAFETY_SETTINGS = [
   { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
 ];
 
-// ─── Response schema ──────────────────────────────────────────────────────────
-// Pairing responseMimeType with responseSchema gives the model a contract it
-// must satisfy. The API enforces the schema server-side, dramatically reducing
-// the rate of malformed responses that need parser-level recovery.
-//
+// ─── Response schema: question generation ────────────────────────────────────
 // Schema: array of objects each containing a single "question" string.
 
-const RESPONSE_SCHEMA = {
+const QUESTION_RESPONSE_SCHEMA = {
   type: SchemaType.ARRAY,
   items: {
     type: SchemaType.OBJECT,
@@ -63,43 +59,83 @@ const RESPONSE_SCHEMA = {
   },
 };
 
-// ─── Generation config ────────────────────────────────────────────────────────
+// ─── Response schema: answer evaluation ──────────────────────────────────────
+// Schema: a single object matching the EvaluationResult shape.
+// The API enforces this server-side — malformed responses are rejected before
+// they reach our parser.
+
+const EVALUATION_RESPONSE_SCHEMA = {
+  type: SchemaType.OBJECT,
+  properties: {
+    score:       { type: SchemaType.NUMBER },
+    strengths:   { type: SchemaType.ARRAY,  items: { type: SchemaType.STRING } },
+    weaknesses:  { type: SchemaType.ARRAY,  items: { type: SchemaType.STRING } },
+    suggestions: { type: SchemaType.ARRAY,  items: { type: SchemaType.STRING } },
+    idealAnswer: { type: SchemaType.STRING },
+  },
+  required: ["score", "strengths", "weaknesses", "suggestions", "idealAnswer"],
+};
+
+// ─── Generation config: question generation ───────────────────────────────────
 // temperature 0.7 → enough creativity to vary questions between sessions while
 // still staying factually grounded.
-// responseMimeType + responseSchema: two-layer JSON enforcement.
-//   - responseMimeType tells the model to skip markdown fences.
-//   - responseSchema tells the API to validate the output structure.
 
-const GENERATION_CONFIG = {
+const QUESTION_GENERATION_CONFIG = {
   temperature:      0.7,
   topP:             0.9,
   topK:             40,
   maxOutputTokens:  2048,
   responseMimeType: "application/json",
-  responseSchema:   RESPONSE_SCHEMA,
+  responseSchema:   QUESTION_RESPONSE_SCHEMA,
+};
+
+// ─── Generation config: answer evaluation ────────────────────────────────────
+// temperature 0.2 → evaluations must be consistent and objective.
+// Higher temperature risks the same answer getting wildly different scores
+// on different runs, which would undermine user trust.
+
+const EVALUATION_GENERATION_CONFIG = {
+  temperature:      0.2,
+  topP:             0.8,
+  topK:             20,
+  maxOutputTokens:  2048,
+  responseMimeType: "application/json",
+  responseSchema:   EVALUATION_RESPONSE_SCHEMA,
 };
 
 // ─── Model factory ────────────────────────────────────────────────────────────
 
 /**
- * Returns a configured GenerativeModel instance, or null if the API key is absent.
+ * Returns a model instance configured for question generation.
  * @returns {import("@google/generative-ai").GenerativeModel | null}
  */
 const getGeminiModel = () => {
   if (!genAI) return null;
-
   return genAI.getGenerativeModel({
     model:            "gemini-1.5-flash",
-    generationConfig: GENERATION_CONFIG,
+    generationConfig: QUESTION_GENERATION_CONFIG,
+    safetySettings:   SAFETY_SETTINGS,
+  });
+};
+
+/**
+ * Returns a model instance configured for answer evaluation.
+ * Uses lower temperature (0.2) for consistent, objective scoring.
+ * @returns {import("@google/generative-ai").GenerativeModel | null}
+ */
+const getEvaluationModel = () => {
+  if (!genAI) return null;
+  return genAI.getGenerativeModel({
+    model:            "gemini-1.5-flash",
+    generationConfig: EVALUATION_GENERATION_CONFIG,
     safetySettings:   SAFETY_SETTINGS,
   });
 };
 
 /**
  * Returns whether the Gemini client is ready to make requests.
- * Used by the /api/health endpoint so operators can verify AI status.
  * @returns {boolean}
  */
 const isAiConfigured = () => genAI !== null;
 
-module.exports = { getGeminiModel, isAiConfigured };
+module.exports = { getGeminiModel, getEvaluationModel, isAiConfigured };
