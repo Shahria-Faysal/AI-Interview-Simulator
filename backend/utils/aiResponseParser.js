@@ -182,8 +182,11 @@ const normaliseEvaluation = (parsed) => {
   }
 
   // Score: must be a number 0–10
-  const rawScore = parsed.score;
-  const score = typeof rawScore === "number" && rawScore >= 0 && rawScore <= 10
+  let rawScore = parsed.score;
+  if (typeof rawScore === "string") {
+    rawScore = parseFloat(rawScore);
+  }
+  const score = typeof rawScore === "number" && !isNaN(rawScore) && rawScore >= 0 && rawScore <= 10
     ? Math.round(rawScore * 10) / 10  // round to 1 dp
     : null;
 

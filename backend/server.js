@@ -59,7 +59,7 @@ app.get("/api/health", (req, res) => {
     timestamp: new Date().toISOString(),
     ai: {
       configured:    aiReady,
-      model:         aiReady ? "gemini-1.5-flash" : null,
+      model:         aiReady ? "gemini-2.5-flash" : null,
       fallbackReady: true,   // question bank is always available
     },
   });
