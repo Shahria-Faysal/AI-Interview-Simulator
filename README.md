@@ -1,210 +1,124 @@
-# InterviewAI — Phase 4: AI Answer Evaluation
+# AI Interview Simulator
 
-A full-stack AI Interview Simulator built with **Node.js/Express**, **PostgreSQL/Prisma**, **React/Vite**, **Tailwind CSS**, and **Google Gemini**.
+A full-stack AI-powered mock interview platform designed to help software engineers practice and improve their technical interviewing skills. Built with **Node.js/Express**, **PostgreSQL/Prisma**, **React/Vite**, **Tailwind CSS**, and **Google Gemini**.
 
----
-
-## What's implemented
-
-| Phase | Feature |
-|-------|---------|
-| 1 | Authentication, resume upload, sessions, question storage |
-| 3 | AI question generation via Gemini (fallback to question bank) |
-| **4** | **AI answer evaluation — score, strengths, weaknesses, suggestions, ideal answer** |
+![AI Interview Simulator](https://img.shields.io/badge/Status-Active-success)
+![License](https://img.shields.io/badge/License-MIT-blue)
 
 ---
 
-## Project structure
+## 🌟 Features
 
-```
-interview-simulator/
-├── backend/
-│   ├── config/
-│   │   ├── gemini.js           # Two model factories: generation (temp 0.7) + evaluation (temp 0.2)
-│   │   └── prompts.js          # buildQuestionPrompt() + buildEvaluationPrompt()
-│   ├── controllers/
-│   │   ├── question.controller.js  # submitAnswer → save → evaluate → persist → return
-│   │   └── session.controller.js   # completeSession uses AI scores for final score
-│   ├── services/
-│   │   ├── aiService.js            # generateInterviewQuestions() with fallback
-│   │   ├── evaluationService.js    # evaluateAnswer() with 20s timeout + fallback
-│   │   └── questionBank.service.js # hardcoded fallback bank
-│   ├── utils/
-│   │   ├── aiResponseParser.js     # parseGeminiQuestions() + parseEvaluationResponse()
-│   │   └── logger.js
-│   └── prisma/schema.prisma        # Question: score, strengths[], weaknesses[], suggestions[], idealAnswer
-│
-└── frontend/src/
-    ├── pages/
-    │   ├── InterviewPage.jsx        # Inline AI feedback panel after each answer
-    │   ├── InterviewResultsPage.jsx # Full results: score ring, distribution chart, Q&A breakdown
-    │   ├── HistoryPage.jsx          # Per-question scores, Results button
-    │   └── DashboardPage.jsx        # AI score display, links to results
-    ├── hooks/useApi.js              # useSubmitAnswer returns evaluation data
-    └── utils/format.js             # formatScore, scoreColorClass, scoreLabel
-```
+- **User Authentication**: Secure JWT-based registration and login system.
+- **Resume-Aware Interviews**: Upload your PDF resume and the AI will extract your skills, projects, and experience level to tailor the interview questions specifically to your background.
+- **Dynamic AI Question Generation**: Generates role-specific (Frontend, Backend, Full Stack, Data Analyst) and difficulty-adjusted (Easy, Medium, Hard) technical questions using Google Gemini.
+- **AI Answer Evaluation**: Submit your answers and receive immediate, actionable feedback including a score (1-10), specific strengths, weaknesses, actionable suggestions, and an "Ideal Answer" written by a senior engineer.
+- **Interview Analytics & History**: Track your progress over time with a comprehensive dashboard showing your past sessions, average scores, and detailed breakdowns of your performance per question.
+- **Resilient Fallback System**: The app guarantees 100% uptime. If the Gemini API fails, times out, or the API key is missing, the system automatically falls back to a locally hardcoded technical question bank.
 
 ---
 
-## Setup
+## 💻 Tech Stack
 
-### Backend
+**Frontend**:
+- React (Vite)
+- Tailwind CSS
+- React Router
+- TanStack Query
+- Axios
 
-```bash
-cd backend
-npm install
-cp .env.example .env
-# Fill in DATABASE_URL, JWT_SECRET, GEMINI_API_KEY
-
-npm run db:generate
-npm run db:push     # or: npm run db:migrate for migration history
-npm run dev
-```
-
-### Frontend
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
+**Backend**:
+- Node.js & Express.js
+- PostgreSQL
+- Prisma ORM
+- Google Gemini API (`@google/generative-ai`)
+- `pdf-parse` (for resume text extraction)
 
 ---
 
-## Phase 4: Answer evaluation flow
+## 🚀 Getting Started
 
-```
-PATCH /api/questions/:id/answer
-        │
-        ├─ 1. Validate ownership + session not completed
-        ├─ 2. Save answer to DB immediately (never lost)
-        ├─ 3. evaluateAnswer({ question, answer, role, difficulty })
-        │         │
-        │         ├─ tryGeminiEvaluation()  ← temp 0.2, 20s timeout
-        │         │     ├─ build prompt     (config/prompts.js)
-        │         │     ├─ call Gemini      (gemini-1.5-flash)
-        │         │     ├─ parse + validate (utils/aiResponseParser.js)
-        │         │     └─ return evaluation
-        │         │
-        │         └─ on failure → FALLBACK_EVALUATION (null fields)
-        │
-        ├─ 4. Persist: score, strengths[], weaknesses[], suggestions[], idealAnswer
-        └─ 5. Return evaluation to frontend → inline feedback panel
-```
+### Prerequisites
+- Node.js (v18 or higher)
+- PostgreSQL (running locally or a cloud instance like Neon/Supabase)
+- A Google Gemini API Key
 
-### Evaluation prompt design
+### Backend Setup
 
-- **Temperature 0.2** — low temperature for consistent, reproducible scoring
-- **responseSchema** — API-enforced JSON contract (score, strengths[], weaknesses[], suggestions[], idealAnswer)
-- **Score 0** reserved for blank/gibberish answers
-- Asks for *specific* strengths/weaknesses, not generic feedback
-- Includes an ideal answer so the user can learn, not just be judged
+1. Navigate to the backend directory:
+   ```bash
+   cd backend
+   ```
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+3. Configure environment variables:
+   Create a `.env` file in the backend directory:
+   ```env
+   # Database connection string
+   DATABASE_URL="postgresql://user:password@localhost:5432/interview_simulator?schema=public"
+   
+   # JWT Secret for authentication
+   JWT_SECRET="your_super_secret_jwt_key"
+   
+   # Google Gemini API Key
+   GEMINI_API_KEY="your_gemini_api_key_here"
+   ```
+4. Push the Prisma schema to the database:
+   ```bash
+   npm run db:push
+   ```
+5. Start the backend development server:
+   ```bash
+   npm run dev
+   ```
 
-### Session score calculation (Phase 4)
+### Frontend Setup
 
-When `PATCH /api/sessions/:id/complete` is called:
-1. If any questions have AI scores → average them (1–10 scale) → multiply by 10 → session score (0–100)
-2. Fallback (no AI scores) → % of questions answered (Phase 1 logic)
-
----
-
-## API reference
-
-### Questions (updated Phase 4)
-
-**`PATCH /api/questions/:id/answer`** — Submit and evaluate an answer
-
-Request:
-```json
-{ "answer": "React uses a Virtual DOM to efficiently update..." }
-```
-
-Response:
-```json
-{
-  "success": true,
-  "message": "Answer saved and evaluated.",
-  "data": {
-    "question": {
-      "id": "...",
-      "question": "What is the Virtual DOM?",
-      "answer": "React uses a Virtual DOM...",
-      "score": 7.5,
-      "strengths": ["Correctly explained in-memory diffing"],
-      "weaknesses": ["Did not mention reconciliation algorithm"],
-      "suggestions": ["Study React's reconciliation and Fiber"],
-      "idealAnswer": "The Virtual DOM is an in-memory representation..."
-    },
-    "evaluation": {
-      "score": 7.5,
-      "strengths": ["..."],
-      "weaknesses": ["..."],
-      "suggestions": ["..."],
-      "idealAnswer": "...",
-      "source": "ai"
-    }
-  }
-}
-```
-
-### Sessions
-
-**`PATCH /api/sessions/:id/complete`** — Finish session, compute final score
-
-Response includes `score` (0–100) derived from AI question scores where available.
-
-### New frontend route
-
-| Route | Page |
-|-------|------|
-| `/interview/:id/results` | `InterviewResultsPage` — full breakdown |
+1. Navigate to the frontend directory:
+   ```bash
+   cd frontend
+   ```
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+3. Start the frontend development server:
+   ```bash
+   npm run dev
+   ```
 
 ---
 
-## Database schema (Phase 4 additions)
+## 🧠 Architecture & AI Flows
 
-```prisma
-model Question {
-  id          String   @id @default(cuid())
-  sessionId   String
-  question    String
-  answer      String?
-  orderIndex  Int
+### Resume Analysis Pipeline
+When a user uploads a resume, a non-blocking asynchronous pipeline processes the file:
+1. The PDF is parsed and text is extracted using `pdf-parse`.
+2. The raw text is sanitized and sent to Gemini (`gemini-2.5-flash`).
+3. Gemini extracts structured JSON data: `skills`, `projects`, `experienceLevel`, and `domains`.
+4. This data is saved to the database and used to personalize future interviews.
 
-  // Phase 4 evaluation fields (null until answer is submitted + evaluated)
-  score       Float?
-  strengths   String[]
-  weaknesses  String[]
-  suggestions String[]
-  idealAnswer String?
-}
-```
+### Answer Evaluation Pipeline
+When a user submits an answer:
+1. The answer is immediately saved to the database to prevent data loss.
+2. A strict prompt is sent to `gemini-2.5-pro` with a low temperature (`0.2`) to ensure consistent, objective scoring.
+3. The response is parsed to extract the `score`, `strengths`, `weaknesses`, `suggestions`, and `idealAnswer`.
+4. The evaluation is returned to the frontend for inline feedback.
 
-**Migration for existing Phase 3 databases:**
-```bash
-npm run db:push   # safe — adds new columns, keeps existing data
-```
-
----
-
-## Fallback guarantee
-
+### Fallback Guarantee
 Neither question generation nor answer evaluation will ever crash the app:
-
-| Scenario | Behaviour |
-|----------|-----------|
-| No `GEMINI_API_KEY` | Questions from bank; evaluation returns `null` fields |
-| Gemini timeout (>20s) | Same fallback |
-| Gemini returns bad JSON | Parser recovery → fallback |
-| Answer is empty | Evaluation skipped; answer still saved |
+- **No `GEMINI_API_KEY`**: Questions are drawn from the fallback bank; evaluation returns null fields.
+- **Gemini timeout (>20s)**: Handled gracefully with fallback.
+- **Gemini returns malformed JSON**: Parser recovery mechanisms trigger the fallback.
 
 ---
 
-## Phase 5 roadmap
+## 🗺️ Future Roadmap
 
-- [ ] Resume-aware questions (parse CV, tailor questions to candidate)
-- [ ] Job description matching
+- [ ] Job description matching (upload a JD and get interviewed specifically for that role)
 - [ ] Streak tracking and gamification
 - [ ] Refresh token rotation
-- [ ] Cloud file storage (Cloudinary / S3)
-- [ ] Integration tests
+- [ ] Cloud file storage for resumes (Cloudinary / AWS S3)
+- [ ] Integration tests and CI/CD pipelines
