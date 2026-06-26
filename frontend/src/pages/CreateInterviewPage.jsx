@@ -1,12 +1,12 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import {
   Layers, Server, Globe2, BarChart2,
   ChevronRight, Zap, BarChart, Flame,
-  BrainCircuit, RefreshCw, AlertCircle
+  BrainCircuit, RefreshCw, AlertCircle, Sparkles, FileText
 } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { useCreateSession } from '../hooks/useApi'
+import { useCreateSession, useResumes, useResumeInsights } from '../hooks/useApi'
 import { PageHeader, Card, Button, ErrorAlert } from '../components/ui'
 
 // ─── Static data ──────────────────────────────────────────────────────────────
@@ -128,6 +128,14 @@ export default function CreateInterviewPage() {
   const [serverError,        setServerError]        = useState('')
   const [retryCount,         setRetryCount]         = useState(0)
 
+  // Check if user has an analyzed resume for personalization notice
+  const { data: resumes = [] }       = useResumes()
+  const latestResume                 = resumes[0] ?? null
+  const { data: insights }           = useResumeInsights(latestResume?.id)
+  const hasAnalyzedResume            = insights?.analysisStatus === 'done' &&
+                                       ((insights?.skills?.length ?? 0) > 0 ||
+                                        (insights?.projects?.length ?? 0) > 0)
+
   const handleStart = async () => {
     if (!selectedRole)       { toast.error('Please select a role.');       return }
     if (!selectedDifficulty) { toast.error('Please select a difficulty.'); return }
@@ -138,8 +146,9 @@ export default function CreateInterviewPage() {
       const res = await createSession({ role: selectedRole, difficulty: selectedDifficulty })
       const { session, meta } = res.data
 
-      // Let the user know whether AI or fallback powered their session
-      if (meta?.questionSource === 'ai') {
+      if (meta?.isPersonalized) {
+        toast.success(`✨ ${meta.questionCount} personalized questions ready!`)
+      } else if (meta?.questionSource === 'ai') {
         toast.success(`${meta.questionCount} AI-generated questions ready!`)
       } else {
         toast.success('Interview session created!')
@@ -251,15 +260,43 @@ export default function CreateInterviewPage() {
           </div>
         </div>
 
-        {/* ── AI info banner ── */}
-        <div className="flex items-center gap-3 p-3 rounded-lg bg-brand-50 border border-brand-200 mb-5">
-          <BrainCircuit size={16} className="text-brand-600 flex-shrink-0" />
-          <p className="text-xs text-brand-700">
-            <span className="font-semibold">AI-powered questions</span> — Gemini generates
-            unique questions each session. Questions are saved so they stay consistent
-            throughout your interview.
-          </p>
-        </div>
+        {/* ── Personalization / AI info banner ── */}
+        {hasAnalyzedResume ? (
+          <div className="flex items-start gap-3 p-4 rounded-xl bg-gradient-to-r from-brand-50 to-violet-50 border border-brand-200 mb-5">
+            <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-brand-100 text-brand-600 flex-shrink-0">
+              <Sparkles size={15} />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-brand-800">
+                Personalized interview enabled
+              </p>
+              <p className="text-xs text-brand-600 mt-0.5">
+                Your questions will reference your actual skills
+                {insights?.skills?.slice(0, 3).join(', ') ? ` (${insights.skills.slice(0, 3).join(', ')}${insights.skills.length > 3 ? '…' : ''})` : ''}
+                {' '}and projects from your resume.
+              </p>
+            </div>
+          </div>
+        ) : latestResume ? (
+          <div className="flex items-center gap-3 p-3 rounded-lg bg-amber-50 border border-amber-200 mb-5">
+            <BrainCircuit size={15} className="text-amber-600 flex-shrink-0" />
+            <p className="text-xs text-amber-700">
+              Resume analysis is still in progress — questions will be personalized once ready.
+            </p>
+          </div>
+        ) : (
+          <div className="flex items-center justify-between gap-3 p-3 rounded-lg bg-slate-50 border border-slate-200 mb-5">
+            <div className="flex items-center gap-2">
+              <FileText size={14} className="text-slate-400 flex-shrink-0" />
+              <p className="text-xs text-slate-500">
+                <span className="font-medium text-slate-700">No resume uploaded</span> — questions will use your selected role and difficulty.
+              </p>
+            </div>
+            <Link to="/resume" className="text-xs font-semibold text-brand-600 hover:text-brand-700 flex-shrink-0">
+              Upload
+            </Link>
+          </div>
+        )}
 
         {/* ── Summary + start ── */}
         {canStart ? (

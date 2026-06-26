@@ -1,8 +1,9 @@
 import { Link } from 'react-router-dom'
-import { Plus, FileText, History, Trophy, Briefcase, BrainCircuit, Database, Star } from 'lucide-react'
+import { Plus, FileText, History, Trophy, Briefcase, BrainCircuit, Database, Star, Sparkles } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
-import { useResumes, useSessions } from '../hooks/useApi'
+import { useResumes, useSessions, useResumeInsights } from '../hooks/useApi'
 import { PageHeader, Card, Badge, Button, PageLoader, EmptyState } from '../components/ui'
+import ResumeInsights from '../components/ResumeInsights'
 import { formatRole, formatDifficulty, difficultyVariant, formatDate, scoreColorClass } from '../utils/format'
 
 export default function DashboardPage() {
@@ -22,9 +23,10 @@ export default function DashboardPage() {
     ? Math.round(completedSessions.reduce((sum, s) => sum + (s.score ?? 0), 0) / completedSessions.length)
     : null
 
-  const aiSessionCount = sessions.filter(s => s.questionSource === 'ai').length
-  const latestResume   = resumes[0] ?? null
-  const recentSessions = sessions.slice(0, 3)
+  const aiSessionCount   = sessions.filter(s => s.questionSource === 'ai').length
+  const personalizedCount = sessions.filter(s => s.isPersonalized).length
+  const latestResume     = resumes[0] ?? null
+  const recentSessions   = sessions.slice(0, 3)
 
   return (
     <div className="animate-fade-in">
@@ -69,20 +71,24 @@ export default function DashboardPage() {
           {resumesLoading ? (
             <div className="h-16 bg-slate-100 animate-pulse rounded-lg" />
           ) : latestResume ? (
-            <div className="flex items-center gap-3 p-3 rounded-lg bg-slate-50 border border-slate-200">
-              <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-red-100 text-red-600 flex-shrink-0">
-                <FileText size={18} />
+            <>
+              <div className="flex items-center gap-3 p-3 rounded-lg bg-slate-50 border border-slate-200">
+                <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-red-100 text-red-600 flex-shrink-0">
+                  <FileText size={18} />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-slate-800 truncate">{latestResume.fileName}</p>
+                  <p className="text-xs text-slate-500">{formatDate(latestResume.uploadedAt)}</p>
+                </div>
               </div>
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-slate-800 truncate">{latestResume.fileName}</p>
-                <p className="text-xs text-slate-500">{formatDate(latestResume.uploadedAt)}</p>
-              </div>
-            </div>
+              {/* Compact resume insights — auto-polls until analysis is done */}
+              <ResumeInsights resumeId={latestResume.id} compact />
+            </>
           ) : (
             <EmptyState
               icon={FileText}
               title="No resume yet"
-              description="Upload your PDF resume to get started."
+              description="Upload your PDF resume to get personalized interview questions."
               action={
                 <Link to="/resume">
                   <Button size="sm" variant="secondary">Upload resume</Button>

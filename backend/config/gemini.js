@@ -76,6 +76,20 @@ const EVALUATION_RESPONSE_SCHEMA = {
   required: ["score", "strengths", "weaknesses", "suggestions", "idealAnswer"],
 };
 
+// ─── Response schema: resume analysis ────────────────────────────────────────
+// Schema: a single object matching the ResumeAnalysis shape.
+
+const ANALYSIS_RESPONSE_SCHEMA = {
+  type: SchemaType.OBJECT,
+  properties: {
+    skills:          { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } },
+    projects:        { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } },
+    experienceLevel: { type: SchemaType.STRING },
+    domains:         { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } },
+  },
+  required: ["skills", "projects", "experienceLevel", "domains"],
+};
+
 // ─── Generation config: question generation ───────────────────────────────────
 // temperature 0.7 → enough creativity to vary questions between sessions while
 // still staying factually grounded.
@@ -87,6 +101,15 @@ const QUESTION_GENERATION_CONFIG = {
   maxOutputTokens:  2048,
   responseMimeType: "application/json",
   responseSchema:   QUESTION_RESPONSE_SCHEMA,
+};
+
+// ─── Generation config: resume analysis ───────────────────────────────────────
+// temperature 0.1 → strictly extract facts without hallucination.
+
+const ANALYSIS_GENERATION_CONFIG = {
+  temperature:      0.1,
+  topP:             0.8,
+  topK:             20,
 };
 
 // ─── Generation config: answer evaluation ────────────────────────────────────
@@ -133,9 +156,23 @@ const getEvaluationModel = () => {
 };
 
 /**
+ * Returns a model instance configured for resume analysis.
+ * Uses strict temperature (0.1) and enforces the analysis schema.
+ * @returns {import("@google/generative-ai").GenerativeModel | null}
+ */
+const getAnalysisModel = () => {
+  if (!genAI) return null;
+  return genAI.getGenerativeModel({
+    model:            "gemini-2.5-flash",
+    generationConfig: ANALYSIS_GENERATION_CONFIG,
+    safetySettings:   SAFETY_SETTINGS,
+  });
+};
+
+/**
  * Returns whether the Gemini client is ready to make requests.
  * @returns {boolean}
  */
 const isAiConfigured = () => genAI !== null;
 
-module.exports = { getGeminiModel, getEvaluationModel, isAiConfigured };
+module.exports = { getGeminiModel, getEvaluationModel, getAnalysisModel, isAiConfigured };

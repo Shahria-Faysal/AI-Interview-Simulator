@@ -1,14 +1,14 @@
 /**
  * controllers/session.controller.js
  * Manages interview session lifecycle:
- *   - create   → generate AI questions, seed into DB
+ *   - create   → generate AI questions (personalized if resume exists), seed into DB
  *   - list     → interview history for the current user
  *   - get      → single session with its questions
  *   - complete → mark session finished, calculate score
  */
 
 const prisma = require("../prisma/client");
-const { generateInterviewQuestions } = require("../services/aiService");
+const { generateInterviewQuestions, generatePersonalizedQuestions } = require("../services/aiService");
 const logger = require("../utils/logger");
 
 /**
@@ -25,11 +25,35 @@ const createSession = async (req, res, next) => {
   try {
     const { role, difficulty } = req.body;
 
-    // ── Step 1: Generate questions (AI or fallback) ──────────────────────────
-    const { questions: generatedQuestions, source } = await generateInterviewQuestions(
-      role,
-      difficulty
-    );
+    // ── Step 1: Check for an analysed resume to personalise questions ─────────
+    let resumeAnalysis  = null;
+    let isPersonalized  = false;
+
+    const latestResume = await prisma.resume.findFirst({
+      where:   { userId: req.user.id, analysisStatus: "done" },
+      orderBy: { uploadedAt: "desc" },
+      select:  { id: true, analysisData: true },
+    });
+
+    if (latestResume?.analysisData) {
+      resumeAnalysis = latestResume.analysisData;
+      logger.info("[Session] Found analysed resume — will generate personalized questions", {
+        userId:   req.user.id,
+        resumeId: latestResume.id,
+      });
+    }
+
+    // ── Step 2: Generate questions (personalised or generic) ──────────────────
+    let generatedQuestions, source;
+
+    if (resumeAnalysis) {
+      ({ questions: generatedQuestions, source, isPersonalized } =
+        await generatePersonalizedQuestions(role, difficulty, resumeAnalysis));
+    } else {
+      ({ questions: generatedQuestions, source } =
+        await generateInterviewQuestions(role, difficulty));
+      isPersonalized = false;
+    }
 
     if (!generatedQuestions || generatedQuestions.length === 0) {
       return res.status(500).json({
@@ -40,23 +64,23 @@ const createSession = async (req, res, next) => {
     }
 
     logger.info("[Session] Creating session", {
-      userId:    req.user.id,
+      userId:        req.user.id,
       role,
       difficulty,
       questionCount: generatedQuestions.length,
       source,
+      isPersonalized,
     });
 
-    // ── Step 2: Persist session + questions atomically ───────────────────────
+    // ── Step 3: Persist session + questions atomically ────────────────────────
     const session = await prisma.$transaction(async (tx) => {
       const newSession = await tx.interviewSession.create({
         data: {
           userId:         req.user.id,
           role,
           difficulty,
-          // Store which source generated the questions — persisted so the
-          // frontend can display it consistently on every page load.
           questionSource: source === 'ai' ? 'AI' : 'FALLBACK',
+          isPersonalized,
         },
       });
 
@@ -74,22 +98,22 @@ const createSession = async (req, res, next) => {
       });
     });
 
-    // Attach metadata the frontend can use for informational display.
-    // Normalise questionSource to lowercase ("ai" | "fallback") so the
-    // frontend doesn't need to know about the Prisma enum casing.
     const sessionData = {
       ...session,
       questionSource: session.questionSource === 'AI' ? 'ai' : 'fallback',
-    }
+    };
 
     res.status(201).json({
       success: true,
-      message: 'Interview session created.',
+      message: isPersonalized
+        ? 'Interview session created with personalized questions based on your resume.'
+        : 'Interview session created.',
       data: {
         session: sessionData,
         meta: {
-          questionSource: source,            // "ai" | "fallback"
+          questionSource: source,
           questionCount:  session.questions.length,
+          isPersonalized,
         },
       },
     });

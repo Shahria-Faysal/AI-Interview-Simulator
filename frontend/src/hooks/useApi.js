@@ -9,11 +9,12 @@ import api from '../services/api'
 
 // ─── Query Keys ──────────────────────────────────────────────────────────────
 export const QUERY_KEYS = {
-  me:       ['me'],
-  resumes:  ['resumes'],
-  sessions: ['sessions'],
-  session:  (id) => ['session', id],
-  questions:(id) => ['questions', id],
+  me:             ['me'],
+  resumes:        ['resumes'],
+  resumeInsights: (id) => ['resumeInsights', id],
+  sessions:       ['sessions'],
+  session:        (id) => ['session', id],
+  questions:      (id) => ['questions', id],
 }
 
 // ─── Auth ─────────────────────────────────────────────────────────────────────
@@ -63,6 +64,26 @@ export const useDeleteResume = () => {
   return useMutation({
     mutationFn: (id) => api.delete(`/resumes/${id}`).then(r => r.data),
     onSuccess: () => qc.invalidateQueries({ queryKey: QUERY_KEYS.resumes }),
+  })
+}
+
+/**
+ * Fetches AI analysis insights for a specific resume.
+ * Poll this while analysisStatus is "pending" or "processing".
+ * Disabled when no resumeId is provided.
+ */
+export const useResumeInsights = (resumeId) => {
+  return useQuery({
+    queryKey: QUERY_KEYS.resumeInsights(resumeId),
+    queryFn:  () => api.get(`/resumes/${resumeId}/insights`).then(r => r.data.data),
+    enabled:  !!resumeId,
+    // Automatically refetch while analysis is still in progress
+    refetchInterval: (query) => {
+      const status = query.state.data?.analysisStatus
+      if (status === 'pending' || status === 'processing') return 3000 // poll every 3s
+      return false // stop once done or failed
+    },
+    staleTime: 0,
   })
 }
 

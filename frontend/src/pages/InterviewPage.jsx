@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import {
   CheckCircle2, ChevronLeft, ChevronRight, Send, Trophy,
   BrainCircuit, Database, ThumbsUp, ThumbsDown, Lightbulb,
-  BookOpen, Loader2, AlertCircle, Star
+  BookOpen, Loader2, AlertCircle, Star, Sparkles
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useSession, useSubmitAnswer, useCompleteSession } from '../hooks/useApi'
@@ -12,8 +12,15 @@ import { formatRole, formatDifficulty, difficultyVariant } from '../utils/format
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-function AISourcePill({ source }) {
+function AISourcePill({ source, isPersonalized }) {
   if (!source) return null
+  if (isPersonalized) {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-violet-100 text-violet-700">
+        <Sparkles size={10} /> Personalized
+      </span>
+    )
+  }
   const isAI = source === 'ai'
   return (
     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
@@ -251,7 +258,7 @@ export default function InterviewPage() {
             <Badge variant={difficultyVariant(session.difficulty)}>
               {formatDifficulty(session.difficulty)}
             </Badge>
-            <AISourcePill source={questionSource} />
+            <AISourcePill source={questionSource} isPersonalized={session.isPersonalized} />
           </div>
           <p className="text-sm text-slate-500">
             {answeredCount} of {questions.length} questions answered
@@ -268,6 +275,16 @@ export default function InterviewPage() {
           Finish & see results
         </Button>
       </div>
+
+      {/* ── Personalization notice ── */}
+      {session.isPersonalized && (
+        <div className="flex items-center gap-2 p-3 rounded-lg bg-violet-50 border border-violet-200 mb-5 animate-fade-in">
+          <Sparkles size={14} className="text-violet-500 flex-shrink-0" />
+          <p className="text-xs text-violet-700">
+            <span className="font-semibold">Personalized interview</span> — these questions were tailored to your resume skills and projects.
+          </p>
+        </div>
+      )}
 
       {/* ── Progress bar ── */}
       <div className="w-full h-2 bg-slate-200 rounded-full mb-6 overflow-hidden">

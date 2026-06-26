@@ -3,6 +3,10 @@
  * All Gemini prompt templates live here.
  * Keeping prompts separate from service logic makes them easy to tune
  * without touching business logic.
+ *
+ * Phase 5 additions:
+ *  - buildResumeAnalysisPrompt   → extract skills/projects/level from resume text
+ *  - buildPersonalizedQuestionPrompt → generate questions tailored to the resume
  */
 
 // ─── Role labels ─────────────────────────────────────────────────────────────
@@ -168,5 +172,116 @@ Return ONLY a valid JSON object in this exact format:
 }`;
 };
 
-module.exports = { buildQuestionPrompt, buildEvaluationPrompt, DIFFICULTY_CONFIG, ROLE_LABELS };
+// ─── Resume analysis prompt ──────────────────────────────────────────────────
 
+/**
+ * Builds the prompt used to extract structured data from raw resume text.
+ * Returns a JSON object Gemini should produce — never any other text.
+ *
+ * @param {string} resumeText  Cleaned, truncated resume text
+ * @returns {string}
+ */
+const buildResumeAnalysisPrompt = (resumeText) => {
+  return `You are a senior technical recruiter with 10+ years of experience evaluating software engineering resumes.
+
+Analyze the following resume text and extract key information.
+
+Identify:
+- Technical skills, frameworks, libraries, and tools explicitly mentioned
+- Projects the candidate has built or contributed to
+- Overall experience level (Junior = 0-2 years, Mid-level = 2-5 years, Senior = 5+ years)
+- Development domains (e.g. Web Development, Mobile Development, DevOps, Data Science)
+
+Rules:
+- Only list skills/technologies that are clearly mentioned in the resume — do NOT invent them.
+- Project names should be short and descriptive (e.g. "E-commerce platform", "Real-time dashboard").
+- Experience level must be exactly one of: "Junior", "Mid-level", "Senior", or "Unknown".
+- If something is unclear, omit it rather than guess.
+- Do NOT add preamble, commentary, or markdown outside the JSON.
+
+Return ONLY a valid JSON object in this exact format:
+{
+  "skills": ["skill1", "skill2"],
+  "projects": ["project1", "project2"],
+  "experienceLevel": "Junior",
+  "domains": ["Web Development"]
+}
+
+Resume:
+---
+${resumeText}
+---`;
+};
+
+// ─── Personalized question prompt ────────────────────────────────────────────
+
+/**
+ * Builds the prompt for generating personalized interview questions.
+ * References the candidate's actual resume analysis so questions feel
+ * tailored rather than generic.
+ *
+ * @param {string} role            - Prisma Role enum (e.g. "FRONTEND_DEVELOPER")
+ * @param {string} difficulty      - Prisma Difficulty enum (e.g. "MEDIUM")
+ * @param {object} resumeAnalysis  - Output from resumeAnalysisService.analyzeResume()
+ * @returns {string}
+ */
+const buildPersonalizedQuestionPrompt = (role, difficulty, resumeAnalysis) => {
+  const roleLabel  = ROLE_LABELS[role]  ?? role;
+  const diffConfig = DIFFICULTY_CONFIG[difficulty] ?? DIFFICULTY_CONFIG.MEDIUM;
+  const focusAreas = ROLE_FOCUS[role] ?? "";
+
+  const { skills = [], projects = [], experienceLevel = "Unknown", domains = [] } = resumeAnalysis;
+
+  const skillsText    = skills.length    > 0 ? skills.join(", ")    : "Not specified";
+  const projectsText  = projects.length  > 0 ? projects.join(", ")  : "Not specified";
+  const domainsText   = domains.length   > 0 ? domains.join(", ")   : "Not specified";
+
+  return `You are a senior technical interviewer with 10+ years of experience hiring ${roleLabel}s.
+
+You are conducting a personalized technical interview for the following candidate:
+
+Candidate Profile (extracted from their resume):
+- Experience Level: ${experienceLevel}
+- Technical Skills: ${skillsText}
+- Projects Built: ${projectsText}
+- Domains: ${domainsText}
+
+Interview Context:
+- Role: ${roleLabel}
+- Difficulty: ${diffConfig.label} — questions should test ${diffConfig.description}
+${focusAreas}
+
+Your task is to generate exactly ${diffConfig.count} personalized interview questions.
+
+Personalization requirements:
+- Reference the candidate's ACTUAL technologies and projects where possible.
+- For each technology they listed, ask at least one practical question (not just "what is X?").
+- Ask about real decisions they made in their projects (architecture, trade-offs, debugging).
+- Scale question depth to the candidate's ${experienceLevel} level — avoid patronizing Junior candidates with too-basic questions or overwhelming them with Senior-level architecture questions.
+- Mix conceptual and practical questions.
+- At least 2 questions should directly reference a specific project or technology from their resume.
+
+Requirements:
+- Generate exactly ${diffConfig.count} questions. No more, no less.
+- Every question must be distinct — no duplicates.
+- Do NOT include answers, hints, or explanations — questions only.
+- Do NOT number the questions.
+- Do NOT add preamble, commentary, or markdown outside the JSON.
+
+Return ONLY a valid JSON array in this exact format:
+[
+  { "question": "Your first question here?" },
+  { "question": "Your second question here?" }
+]
+
+The response must start with [ and end with ] with no other text.`;
+};
+
+module.exports = {
+  buildQuestionPrompt,
+  buildEvaluationPrompt,
+  buildResumeAnalysisPrompt,
+  buildPersonalizedQuestionPrompt,
+  DIFFICULTY_CONFIG,
+  ROLE_LABELS,
+};

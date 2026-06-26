@@ -1,10 +1,11 @@
 import { useRef, useState } from 'react'
-import { FileText, UploadCloud, Trash2, ExternalLink } from 'lucide-react'
+import { FileText, UploadCloud, Trash2, ExternalLink, Sparkles } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useResumes, useUploadResume, useDeleteResume } from '../hooks/useApi'
 import {
   PageHeader, Card, Button, Badge, PageLoader, EmptyState
 } from '../components/ui'
+import ResumeInsights from '../components/ResumeInsights'
 import { formatDate, formatFileSize } from '../utils/format'
 
 export default function ResumeUploadPage() {
@@ -62,7 +63,7 @@ export default function ResumeUploadPage() {
     <div className="animate-fade-in">
       <PageHeader
         title="Resume"
-        description="Upload a PDF resume to associate with your profile."
+        description="Upload a PDF resume to get personalized AI interview questions based on your experience."
       />
 
       {/* Upload area */}
@@ -126,40 +127,44 @@ export default function ResumeUploadPage() {
             />
           </Card>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-6">
             {resumes.map((r) => (
-              <Card key={r.id} className="flex items-center justify-between gap-4 p-4">
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-red-100 text-red-600 flex-shrink-0">
-                    <FileText size={18} />
+              <div key={r.id}>
+                <Card className="flex items-center justify-between gap-4 p-4 mb-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-red-100 text-red-600 flex-shrink-0">
+                      <FileText size={18} />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-slate-800 truncate">{r.fileName}</p>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        {formatFileSize(r.fileSize)} · Uploaded {formatDate(r.uploadedAt)}
+                      </p>
+                    </div>
                   </div>
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-slate-800 truncate">{r.fileName}</p>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      {formatFileSize(r.fileSize)} · Uploaded {formatDate(r.uploadedAt)}
-                    </p>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <a
+                      href={r.fileUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="p-2 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
+                      title="View resume"
+                    >
+                      <ExternalLink size={16} />
+                    </a>
+                    <button
+                      onClick={() => handleDelete(r.id)}
+                      disabled={deleting && deletingId === r.id}
+                      className="p-2 rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-500 transition-colors disabled:opacity-50"
+                      title="Delete resume"
+                    >
+                      <Trash2 size={16} />
+                    </button>
                   </div>
-                </div>
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  <a
-                    href={r.fileUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="p-2 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
-                    title="View resume"
-                  >
-                    <ExternalLink size={16} />
-                  </a>
-                  <button
-                    onClick={() => handleDelete(r.id)}
-                    disabled={deleting && deletingId === r.id}
-                    className="p-2 rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-500 transition-colors disabled:opacity-50"
-                    title="Delete resume"
-                  >
-                    <Trash2 size={16} />
-                  </button>
-                </div>
-              </Card>
+                </Card>
+                {/* AI Insights — full view, auto-polls until done */}
+                <ResumeInsights resumeId={r.id} />
+              </div>
             ))}
           </div>
         )}
